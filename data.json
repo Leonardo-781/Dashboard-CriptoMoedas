@@ -1,0 +1,22 @@
+{
+    "data": [
+        {
+            "id": 1,
+            "name": "Produto A",
+            "description": "Descrição do Produto A",
+            "price": 10.99
+        },
+        {
+            "id": 2,
+            "name": "Produto B",
+            "description": "Descrição do Produto B",
+            "price": 20.99
+        },
+        {
+            "id": 3,
+            "name": "Produto C",
+            "description": "Descrição do Produto C",
+            "price": 15.50
+        }
+    ]
+}
