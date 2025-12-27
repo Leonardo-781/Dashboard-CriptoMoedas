@@ -3,32 +3,214 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aquisição de Dados</title>
+    <title>Dashboard de Criptomoedas</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
     <div class="container">
-        <h1>Dados do Site</h1>
-        <button id="fetchDataButton">Obter Dados</button>
-        <div id="result"></div>
+        <header class="header">
+            <h1><i class="fas fa-coins"></i> Dashboard de Criptomoedas</h1>
+            <p class="subtitle">Cotações em tempo real</p>
+        </header>
+
+        <div class="controls">
+            <button id="fetchDataButton" class="btn btn-primary">
+                <i class="fas fa-sync"></i> Atualizar Cotações
+            </button>
+            <span id="lastUpdate" class="last-update"></span>
+        </div>
+
+        <div class="loading" id="loading" style="display:none;">
+            <i class="fas fa-spinner fa-spin"></i> Carregando dados...
+        </div>
+
+        <div id="result" class="crypto-grid"></div>
+
+        <footer class="footer">
+            <p>Dados fornecidos pela API CoinGecko | Atualizado automaticamente a cada 60 segundos</p>
+        </footer>
     </div>
 
     <script>
-        document.getElementById('fetchDataButton').addEventListener('click', function() {
+        // Mapeamento de ícones de criptos
+        const cryptoIcons = {
+            'bitcoin': 'fab fa-bitcoin',
+            'ethereum': 'fab fa-ethereum',
+            'litecoin': 'fab fa-btc',
+            'ripple': 'fas fa-x',
+            'cardano': 'fas fa-coins',
+            'solana': 'fas fa-coins',
+            'dogecoin': 'fab fa-doge',
+            'polkadot': 'fas fa-circle',
+            'avalanche': 'fas fa-mountain',
+            'uniswap': 'fas fa-swap'
+        };
+
+        function getIcon(name) {
+            const lower = name.toLowerCase();
+            return cryptoIcons[lower] || 'fas fa-coins';
+        }
+
+        function formatPrice(price) {
+            if (price === 0 || !price) return 'N/A';
+            return new Intl.NumberFormat('pt-BR', {
+                style: 'currency',
+                currency: 'BRL',
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }).format(price);
+        }
+
+        function formatCompactPrice(price) {
+            if (price === 0 || !price) return 'N/A';
+            if (price >= 1000000000) {
+                return 'R$ ' + (price / 1000000000).toFixed(2) + 'B';
+            } else if (price >= 1000000) {
+                return 'R$ ' + (price / 1000000).toFixed(2) + 'M';
+            } else if (price >= 1000) {
+                return 'R$ ' + (price / 1000).toFixed(2) + 'K';
+            }
+            return formatPrice(price);
+        }
+
+        function getTrendingStatus(change) {
+            if (change > 5) return { icon: '📈', class: 'trending-up', text: 'Em alta' };
+            if (change > 0) return { icon: '↗️', class: 'trending-stable', text: 'Estável' };
+            if (change > -5) return { icon: '↘️', class: 'trending-stable', text: 'Estável' };
+            return { icon: '📉', class: 'trending-down', text: 'Em queda' };
+        }
+
+        function updateLastUpdate() {
+            const now = new Date();
+            document.getElementById('lastUpdate').textContent = 
+                `⏰ ${now.toLocaleTimeString('pt-BR')}`;
+        }
+
+        function fetchCryptoData() {
+            const loading = document.getElementById('loading');
+            const result = document.getElementById('result');
+            
+            loading.style.display = 'flex';
+            result.innerHTML = '';
+
             fetch('api.php')
                 .then(response => response.json())
                 .then(data => {
-                    let output = '<ul>';
-                    data.data.forEach(item => {
-                        output += `<li>${item.name} - ${item.description} - $${item.price}</li>`;
+                    let output = '';
+                    
+                    data.forEach((crypto, index) => {
+                        const change24h = crypto.price_change_percentage_24h || 0;
+                        const icon = getIcon(crypto.name);
+                        const trending = getTrendingStatus(change24h);
+                        const priceChange = crypto.high_24h - crypto.low_24h;
+                        const priceChangePercent = crypto.high_24h > 0 ? 
+                            ((priceChange / crypto.low_24h) * 100).toFixed(2) : 0;
+                        
+                        output += `
+                            <div class="crypto-card">
+                                <!-- HEADER -->
+                                <div class="crypto-header">
+                                    <div class="rank-badge">#${crypto.market_cap_rank || index + 1}</div>
+                                    <div class="crypto-name-section">
+                                        <div class="crypto-icon-name">
+                                            <i class="${icon}"></i>
+                                            <div>
+                                                <h3>${crypto.name}</h3>
+                                                <span class="symbol">${crypto.symbol.toUpperCase()}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="trending-badge ${trending.class}">
+                                        ${trending.icon} ${trending.text}
+                                    </div>
+                                </div>
+
+                                <!-- PREÇO PRINCIPAL -->
+                                <div class="price-main">
+                                    <div class="current-price">${formatPrice(crypto.current_price)}</div>
+                                    <div class="price-change ${change24h >= 0 ? 'positive' : 'negative'}">
+                                        <span class="icon">${change24h >= 0 ? '▲' : '▼'}</span>
+                                        <span class="value">${Math.abs(change24h).toFixed(2)}%</span>
+                                    </div>
+                                </div>
+
+                                <!-- RANGE 24H -->
+                                <div class="price-range">
+                                    <div class="range-label">Variação 24h</div>
+                                    <div class="range-bar">
+                                        <div class="range-info">
+                                            <small>Min: ${formatPrice(crypto.low_24h)}</small>
+                                            <small>Max: ${formatPrice(crypto.high_24h)}</small>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- DETALHES -->
+                                <div class="crypto-details">
+                                    <div class="detail-row">
+                                        <div class="detail-item">
+                                            <span class="detail-icon">💰</span>
+                                            <span class="detail-label">Market Cap</span>
+                                            <span class="detail-value">${formatCompactPrice(crypto.market_cap)}</span>
+                                        </div>
+                                        <div class="detail-item">
+                                            <span class="detail-icon">📊</span>
+                                            <span class="detail-label">Volume 24h</span>
+                                            <span class="detail-value">${formatCompactPrice(crypto.total_volume)}</span>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="detail-row">
+                                        <div class="detail-item">
+                                            <span class="detail-icon">🔄</span>
+                                            <span class="detail-label">Supply</span>
+                                            <span class="detail-value">${crypto.circulating_supply ? crypto.circulating_supply.toFixed(0) : 'N/A'}</span>
+                                        </div>
+                                        <div class="detail-item">
+                                            <span class="detail-icon">📈</span>
+                                            <span class="detail-label">Range 24h</span>
+                                            <span class="detail-value">${priceChangePercent}%</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- FOOTER -->
+                                <div class="crypto-footer">
+                                    <small>Atualizado: ${new Date(crypto.last_updated).toLocaleTimeString('pt-BR')}</small>
+                                </div>
+                            </div>
+                        `;
                     });
-                    output += '</ul>';
-                    document.getElementById('result').innerHTML = output;
+
+                    result.innerHTML = output;
+                    updateLastUpdate();
                 })
                 .catch(error => {
-                    document.getElementById('result').innerHTML = `<p>Erro ao obter dados</p>`;
+                    console.error('Erro:', error);
+                    result.innerHTML = `
+                        <div class="error-message">
+                            <i class="fas fa-exclamation-circle"></i>
+                            <p>❌ Erro ao obter dados das criptomoedas</p>
+                            <p style="font-size: 12px; color: #666;">Verifique se o servidor PHP está rodando</p>
+                            <pre style="text-align: left; background: #f0f0f0; padding: 10px; border-radius: 5px; font-size: 11px; margin-top: 10px;">${error.message}</pre>
+                        </div>
+                    `;
+                    console.log('Erro detalhado:', error);
+                })
+                .finally(() => {
+                    loading.style.display = 'none';
                 });
-        });
+        }
+
+        // Event listeners
+        document.getElementById('fetchDataButton').addEventListener('click', fetchCryptoData);
+
+        // Carregar dados ao abrir a página
+        window.addEventListener('load', fetchCryptoData);
+
+        // Auto-atualizar a cada 60 segundos
+        setInterval(fetchCryptoData, 60000);
     </script>
 </body>
 </html>
