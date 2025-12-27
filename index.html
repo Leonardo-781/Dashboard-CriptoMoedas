@@ -94,18 +94,30 @@
             loading.style.display = 'flex';
             result.innerHTML = '';
 
-            fetch('api.php')
-                .then(response => response.json())
+            // URL da API CoinGecko (chamada direta do navegador)
+            const url = 'https://api.coingecko.com/api/v3/coins/markets?vs_currency=brl&order=market_cap_desc&per_page=10&page=1&sparkline=false&locale=pt';
+
+            fetch(url)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
                 .then(data => {
+                    if (!Array.isArray(data) || data.length === 0) {
+                        throw new Error('Dados inválidos recebidos da API');
+                    }
+
                     let output = '';
                     
                     data.forEach((crypto, index) => {
                         const change24h = crypto.price_change_percentage_24h || 0;
                         const icon = getIcon(crypto.name);
                         const trending = getTrendingStatus(change24h);
-                        const priceChange = crypto.high_24h - crypto.low_24h;
-                        const priceChangePercent = crypto.high_24h > 0 ? 
-                            ((priceChange / crypto.low_24h) * 100).toFixed(2) : 0;
+                        const priceChange = (crypto.high_24h || 0) - (crypto.low_24h || 0);
+                        const priceChangePercent = (crypto.high_24h || 0) > 0 ? 
+                            ((priceChange / (crypto.low_24h || 1)) * 100).toFixed(2) : 0;
                         
                         output += `
                             <div class="crypto-card">
@@ -191,12 +203,11 @@
                     result.innerHTML = `
                         <div class="error-message">
                             <i class="fas fa-exclamation-circle"></i>
-                            <p>❌ Erro ao obter dados das criptomoedas</p>
-                            <p style="font-size: 12px; color: #666;">Verifique se o servidor PHP está rodando</p>
-                            <pre style="text-align: left; background: #f0f0f0; padding: 10px; border-radius: 5px; font-size: 11px; margin-top: 10px;">${error.message}</pre>
+                            <p>❌ Erro ao obter dados</p>
+                            <p style="font-size: 12px; color: #666;">${error.message}</p>
+                            <p style="font-size: 11px; color: #999; margin-top: 15px;">💡 Verifique sua conexão com a internet<br>Recarregue a página para tentar novamente</p>
                         </div>
                     `;
-                    console.log('Erro detalhado:', error);
                 })
                 .finally(() => {
                     loading.style.display = 'none';
