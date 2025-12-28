@@ -64,7 +64,3 @@ Para dúvidas ou sugestões sobre este projeto, entre em contato.
 ## 📄 Licença
 
 Este projeto é de código aberto e está disponível para uso livre.
-
----
-
-**Desenvolvido com ❤️**
