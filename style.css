@@ -62,6 +62,38 @@ body {
     flex-wrap: wrap;
 }
 
+.currency-toggle {
+    display: flex;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.15);
+    padding: 5px;
+    border-radius: 10px;
+}
+
+.btn-currency {
+    background: transparent;
+    color: rgba(255, 255, 255, 0.75);
+    border: 2px solid transparent;
+    padding: 8px 20px;
+    border-radius: 7px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.25s ease;
+}
+
+.btn-currency:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: white;
+}
+
+.btn-currency.active {
+    background: white;
+    color: var(--primary);
+    border-color: white;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
+}
+
 .btn {
     padding: 12px 30px;
     font-size: 1rem;
@@ -216,17 +248,60 @@ body {
 }
 
 .price-main {
-    margin-bottom: 25px;
+    margin-bottom: 20px;
     display: flex;
     justify-content: space-between;
-    align-items: baseline;
+    align-items: flex-start;
 }
 
 .current-price {
-    font-size: 2.5rem;
+    font-size: 2rem;
     font-weight: 700;
     color: var(--accent);
-    line-height: 1;
+    line-height: 1.1;
+}
+
+.secondary-price {
+    font-size: 0.85rem;
+    color: #9ca3af;
+    font-weight: 500;
+    margin-top: 4px;
+}
+
+/* Sparkline chart */
+.sparkline-container {
+    margin-bottom: 20px;
+    padding: 12px 15px;
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.04), rgba(59, 130, 246, 0.02));
+    border-radius: 10px;
+    border: 1px solid rgba(59, 130, 246, 0.1);
+}
+
+.sparkline-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.8rem;
+    color: #6b7280;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 10px;
+}
+
+.sparkline-change {
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.sparkline-chart {
+    height: 70px;
+    position: relative;
+}
+
+.sparkline-chart canvas {
+    width: 100% !important;
+    height: 100% !important;
 }
 
 .price-change {
@@ -254,7 +329,7 @@ body {
 }
 
 .price-range {
-    margin-bottom: 25px;
+    margin-bottom: 20px;
     padding: 15px;
     background-color: var(--light);
     border-radius: 8px;
@@ -424,6 +499,16 @@ body {
 
     .btn {
         width: 100%;
+        justify-content: center;
+    }
+
+    .currency-toggle {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .btn-currency {
+        flex: 1;
         justify-content: center;
     }
 

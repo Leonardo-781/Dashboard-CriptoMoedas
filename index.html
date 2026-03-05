@@ -6,18 +6,23 @@
     <title>Dashboard de Criptomoedas</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="chart.umd.js"></script>
 </head>
 <body>
     <div class="container">
         <header class="header">
             <h1><i class="fas fa-coins"></i> Dashboard de Criptomoedas</h1>
-            <p class="subtitle">Cotações em tempo real</p>
+            <p class="subtitle">Cotações em tempo real • BRL &amp; USDT</p>
         </header>
 
         <div class="controls">
             <button id="fetchDataButton" class="btn btn-primary">
                 <i class="fas fa-sync"></i> Atualizar Cotações
             </button>
+            <div class="currency-toggle">
+                <button id="btnBRL" class="btn btn-currency active">🇧🇷 BRL</button>
+                <button id="btnUSDT" class="btn btn-currency">💵 USDT</button>
+            </div>
             <span id="lastUpdate" class="last-update"></span>
         </div>
 
@@ -44,15 +49,19 @@
             'dogecoin': 'fab fa-doge',
             'polkadot': 'fas fa-circle',
             'avalanche': 'fas fa-mountain',
-            'uniswap': 'fas fa-swap'
+            'uniswap': 'fas fa-exchange-alt'
         };
+
+        let currentCurrency = 'brl';
+        let chartInstances = {};
+        let cachedData = { brl: null, usd: null };
 
         function getIcon(name) {
             const lower = name.toLowerCase();
             return cryptoIcons[lower] || 'fas fa-coins';
         }
 
-        function formatPrice(price) {
+        function formatPriceBRL(price) {
             if (price === 0 || !price) return 'N/A';
             return new Intl.NumberFormat('pt-BR', {
                 style: 'currency',
@@ -62,140 +71,250 @@
             }).format(price);
         }
 
-        function formatCompactPrice(price) {
+        function formatPriceUSD(price) {
             if (price === 0 || !price) return 'N/A';
-            if (price >= 1000000000) {
-                return 'R$ ' + (price / 1000000000).toFixed(2) + 'B';
-            } else if (price >= 1000000) {
-                return 'R$ ' + (price / 1000000).toFixed(2) + 'M';
-            } else if (price >= 1000) {
-                return 'R$ ' + (price / 1000).toFixed(2) + 'K';
-            }
-            return formatPrice(price);
+            return new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: 'USD',
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }).format(price);
+        }
+
+        function formatCompactPrice(price, currency) {
+            if (!price) return 'N/A';
+            const symbol = currency === 'brl' ? 'R$ ' : '$ ';
+            if (price >= 1000000000) return symbol + (price / 1000000000).toFixed(2) + 'B';
+            if (price >= 1000000)    return symbol + (price / 1000000).toFixed(2) + 'M';
+            if (price >= 1000)       return symbol + (price / 1000).toFixed(2) + 'K';
+            return currency === 'brl' ? formatPriceBRL(price) : formatPriceUSD(price);
         }
 
         function getTrendingStatus(change) {
-            if (change > 5) return { icon: '📈', class: 'trending-up', text: 'Em alta' };
-            if (change > 0) return { icon: '↗️', class: 'trending-stable', text: 'Estável' };
+            if (change > 5)  return { icon: '📈', class: 'trending-up',     text: 'Em alta' };
+            if (change > 0)  return { icon: '↗️', class: 'trending-stable', text: 'Estável' };
             if (change > -5) return { icon: '↘️', class: 'trending-stable', text: 'Estável' };
-            return { icon: '📉', class: 'trending-down', text: 'Em queda' };
+            return               { icon: '📉', class: 'trending-down',   text: 'Em queda' };
         }
 
         function updateLastUpdate() {
             const now = new Date();
-            document.getElementById('lastUpdate').textContent = 
+            document.getElementById('lastUpdate').textContent =
                 `⏰ ${now.toLocaleTimeString('pt-BR')}`;
+        }
+
+        function destroyCharts() {
+            Object.values(chartInstances).forEach(chart => chart.destroy());
+            chartInstances = {};
+        }
+
+        function renderSparklineChart(canvasId, sparklineData, isPositive) {
+            const canvas = document.getElementById(canvasId);
+            if (!canvas || !sparklineData || sparklineData.length === 0) return;
+
+            // Sample down to ~42 points for rendering performance
+            const step = Math.ceil(sparklineData.length / 42);
+            const sampled = sparklineData.filter((_, i) => i % step === 0);
+
+            const color = isPositive ? '#10b981' : '#ef4444';
+            const bgColor = isPositive ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)';
+
+            chartInstances[canvasId] = new Chart(canvas.getContext('2d'), {
+                type: 'line',
+                data: {
+                    labels: sampled.map((_, i) => i),
+                    datasets: [{
+                        data: sampled,
+                        borderColor: color,
+                        backgroundColor: bgColor,
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 0,
+                        pointHoverRadius: 4,
+                        pointHoverBackgroundColor: color
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            enabled: true,
+                            callbacks: {
+                                title: () => '',
+                                label: ctx => {
+                                    const price = ctx.raw;
+                                    return currentCurrency === 'brl'
+                                        ? formatPriceBRL(price)
+                                        : formatPriceUSD(price);
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { display: false },
+                        y: { display: false }
+                    },
+                    animation: { duration: 400 }
+                }
+            });
+        }
+
+        function renderCards(dataBRL, dataUSD) {
+            destroyCharts();
+            const result = document.getElementById('result');
+            let output = '';
+
+            dataBRL.forEach((cryptoBRL, index) => {
+                const cryptoUSD = dataUSD.find(c => c.id === cryptoBRL.id) || {};
+                const change24h = cryptoBRL.price_change_percentage_24h || 0;
+                const change7d  = cryptoBRL.price_change_percentage_7d_in_currency || 0;
+                const icon      = getIcon(cryptoBRL.name);
+                const trending  = getTrendingStatus(change24h);
+                const canvasId  = `chart-${cryptoBRL.id}`;
+
+                const primaryPrice   = currentCurrency === 'brl'
+                    ? formatPriceBRL(cryptoBRL.current_price)
+                    : formatPriceUSD(cryptoUSD.current_price);
+                const secondaryPrice = currentCurrency === 'brl'
+                    ? `≈ ${formatPriceUSD(cryptoUSD.current_price)} USDT`
+                    : `≈ ${formatPriceBRL(cryptoBRL.current_price)}`;
+
+                const high24h  = currentCurrency === 'brl' ? formatPriceBRL(cryptoBRL.high_24h)  : formatPriceUSD(cryptoUSD.high_24h);
+                const low24h   = currentCurrency === 'brl' ? formatPriceBRL(cryptoBRL.low_24h)   : formatPriceUSD(cryptoUSD.low_24h);
+                const mktCap   = currentCurrency === 'brl' ? formatCompactPrice(cryptoBRL.market_cap,  'brl') : formatCompactPrice(cryptoUSD.market_cap,  'usd');
+                const vol24h   = currentCurrency === 'brl' ? formatCompactPrice(cryptoBRL.total_volume,'brl') : formatCompactPrice(cryptoUSD.total_volume,'usd');
+
+                output += `
+                    <div class="crypto-card">
+                        <!-- HEADER -->
+                        <div class="crypto-header">
+                            <div class="rank-badge">#${cryptoBRL.market_cap_rank || index + 1}</div>
+                            <div class="crypto-name-section">
+                                <div class="crypto-icon-name">
+                                    <i class="${icon}"></i>
+                                    <div>
+                                        <h3>${cryptoBRL.name}</h3>
+                                        <span class="symbol">${cryptoBRL.symbol.toUpperCase()}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="trending-badge ${trending.class}">
+                                ${trending.icon} ${trending.text}
+                            </div>
+                        </div>
+
+                        <!-- PREÇOS (BRL + USDT) -->
+                        <div class="price-main">
+                            <div>
+                                <div class="current-price">${primaryPrice}</div>
+                                <div class="secondary-price">${secondaryPrice}</div>
+                            </div>
+                            <div class="price-change ${change24h >= 0 ? 'positive' : 'negative'}">
+                                <span class="icon">${change24h >= 0 ? '▲' : '▼'}</span>
+                                <span class="value">${Math.abs(change24h).toFixed(2)}%</span>
+                            </div>
+                        </div>
+
+                        <!-- GRÁFICO SPARKLINE 7 DIAS -->
+                        <div class="sparkline-container">
+                            <div class="sparkline-label">
+                                <span>📊 Variação 7 dias</span>
+                                <span class="sparkline-change ${change7d >= 0 ? 'positive' : 'negative'}">
+                                    ${change7d >= 0 ? '▲' : '▼'} ${Math.abs(change7d).toFixed(2)}%
+                                </span>
+                            </div>
+                            <div class="sparkline-chart">
+                                <canvas id="${canvasId}"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- RANGE 24H -->
+                        <div class="price-range">
+                            <div class="range-label">Variação 24h</div>
+                            <div class="range-bar"></div>
+                            <div class="range-info">
+                                <small>Min: ${low24h}</small>
+                                <small>Max: ${high24h}</small>
+                            </div>
+                        </div>
+
+                        <!-- DETALHES -->
+                        <div class="crypto-details">
+                            <div class="detail-row">
+                                <div class="detail-item">
+                                    <span class="detail-icon">💰</span>
+                                    <span class="detail-label">Market Cap</span>
+                                    <span class="detail-value">${mktCap}</span>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-icon">📊</span>
+                                    <span class="detail-label">Volume 24h</span>
+                                    <span class="detail-value">${vol24h}</span>
+                                </div>
+                            </div>
+                            <div class="detail-row">
+                                <div class="detail-item">
+                                    <span class="detail-icon">🔄</span>
+                                    <span class="detail-label">Supply</span>
+                                    <span class="detail-value">${cryptoBRL.circulating_supply ? Number(cryptoBRL.circulating_supply).toLocaleString(currentCurrency === 'brl' ? 'pt-BR' : 'en-US', {maximumFractionDigits:0}) : 'N/A'}</span>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-icon">📅</span>
+                                    <span class="detail-label">Variação 7d</span>
+                                    <span class="detail-value ${change7d >= 0 ? 'positive' : 'negative'}">${change7d >= 0 ? '▲' : '▼'} ${Math.abs(change7d).toFixed(2)}%</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- FOOTER -->
+                        <div class="crypto-footer">
+                            <small>Atualizado: ${new Date(cryptoBRL.last_updated).toLocaleTimeString('pt-BR')}</small>
+                        </div>
+                    </div>
+                `;
+            });
+
+            result.innerHTML = output;
+
+            // Renderizar gráficos após inserir o HTML
+            dataBRL.forEach(cryptoBRL => {
+                const cryptoUSD = dataUSD.find(c => c.id === cryptoBRL.id) || {};
+                const canvasId  = `chart-${cryptoBRL.id}`;
+                const sparkline = currentCurrency === 'brl'
+                    ? (cryptoBRL.sparkline_in_7d && cryptoBRL.sparkline_in_7d.price) || []
+                    : (cryptoUSD.sparkline_in_7d  && cryptoUSD.sparkline_in_7d.price)  || [];
+                const change24h = cryptoBRL.price_change_percentage_24h || 0;
+                renderSparklineChart(canvasId, sparkline, change24h >= 0);
+            });
         }
 
         function fetchCryptoData() {
             const loading = document.getElementById('loading');
-            const result = document.getElementById('result');
-            
+            const result  = document.getElementById('result');
+
             loading.style.display = 'flex';
             result.innerHTML = '';
+            destroyCharts();
 
-            // URL da API CoinGecko (chamada direta do navegador)
-            const url = 'https://api.coingecko.com/api/v3/coins/markets?vs_currency=brl&order=market_cap_desc&per_page=10&page=1&sparkline=false&locale=pt';
+            const base = 'https://api.coingecko.com/api/v3/coins/markets?order=market_cap_desc&per_page=10&page=1&sparkline=true&price_change_percentage=7d&locale=pt';
+            const urlBRL = base + '&vs_currency=brl';
+            const urlUSD = base + '&vs_currency=usd';
 
-            fetch(url)
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
-                    }
-                    return response.json();
+            Promise.all([fetch(urlBRL), fetch(urlUSD)])
+                .then(responses => {
+                    const failed = responses.find(r => !r.ok);
+                    if (failed) throw new Error(`HTTP error fetching ${responses[0] === failed ? 'BRL' : 'USD'} data! status: ${failed.status}`);
+                    return Promise.all(responses.map(r => r.json()));
                 })
-                .then(data => {
-                    if (!Array.isArray(data) || data.length === 0) {
+                .then(([dataBRL, dataUSD]) => {
+                    if (!Array.isArray(dataBRL) || dataBRL.length === 0) {
                         throw new Error('Dados inválidos recebidos da API');
                     }
-
-                    let output = '';
-                    
-                    data.forEach((crypto, index) => {
-                        const change24h = crypto.price_change_percentage_24h || 0;
-                        const icon = getIcon(crypto.name);
-                        const trending = getTrendingStatus(change24h);
-                        const priceChange = (crypto.high_24h || 0) - (crypto.low_24h || 0);
-                        const priceChangePercent = (crypto.high_24h || 0) > 0 ? 
-                            ((priceChange / (crypto.low_24h || 1)) * 100).toFixed(2) : 0;
-                        
-                        output += `
-                            <div class="crypto-card">
-                                <!-- HEADER -->
-                                <div class="crypto-header">
-                                    <div class="rank-badge">#${crypto.market_cap_rank || index + 1}</div>
-                                    <div class="crypto-name-section">
-                                        <div class="crypto-icon-name">
-                                            <i class="${icon}"></i>
-                                            <div>
-                                                <h3>${crypto.name}</h3>
-                                                <span class="symbol">${crypto.symbol.toUpperCase()}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="trending-badge ${trending.class}">
-                                        ${trending.icon} ${trending.text}
-                                    </div>
-                                </div>
-
-                                <!-- PREÇO PRINCIPAL -->
-                                <div class="price-main">
-                                    <div class="current-price">${formatPrice(crypto.current_price)}</div>
-                                    <div class="price-change ${change24h >= 0 ? 'positive' : 'negative'}">
-                                        <span class="icon">${change24h >= 0 ? '▲' : '▼'}</span>
-                                        <span class="value">${Math.abs(change24h).toFixed(2)}%</span>
-                                    </div>
-                                </div>
-
-                                <!-- RANGE 24H -->
-                                <div class="price-range">
-                                    <div class="range-label">Variação 24h</div>
-                                    <div class="range-bar">
-                                        <div class="range-info">
-                                            <small>Min: ${formatPrice(crypto.low_24h)}</small>
-                                            <small>Max: ${formatPrice(crypto.high_24h)}</small>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- DETALHES -->
-                                <div class="crypto-details">
-                                    <div class="detail-row">
-                                        <div class="detail-item">
-                                            <span class="detail-icon">💰</span>
-                                            <span class="detail-label">Market Cap</span>
-                                            <span class="detail-value">${formatCompactPrice(crypto.market_cap)}</span>
-                                        </div>
-                                        <div class="detail-item">
-                                            <span class="detail-icon">📊</span>
-                                            <span class="detail-label">Volume 24h</span>
-                                            <span class="detail-value">${formatCompactPrice(crypto.total_volume)}</span>
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="detail-row">
-                                        <div class="detail-item">
-                                            <span class="detail-icon">🔄</span>
-                                            <span class="detail-label">Supply</span>
-                                            <span class="detail-value">${crypto.circulating_supply ? crypto.circulating_supply.toFixed(0) : 'N/A'}</span>
-                                        </div>
-                                        <div class="detail-item">
-                                            <span class="detail-icon">📈</span>
-                                            <span class="detail-label">Range 24h</span>
-                                            <span class="detail-value">${priceChangePercent}%</span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- FOOTER -->
-                                <div class="crypto-footer">
-                                    <small>Atualizado: ${new Date(crypto.last_updated).toLocaleTimeString('pt-BR')}</small>
-                                </div>
-                            </div>
-                        `;
-                    });
-
-                    result.innerHTML = output;
+                    cachedData = { brl: dataBRL, usd: dataUSD };
+                    renderCards(dataBRL, dataUSD);
                     updateLastUpdate();
                 })
                 .catch(error => {
@@ -213,6 +332,23 @@
                     loading.style.display = 'none';
                 });
         }
+
+        // Alternância de moeda
+        document.getElementById('btnBRL').addEventListener('click', () => {
+            if (currentCurrency === 'brl') return;
+            currentCurrency = 'brl';
+            document.getElementById('btnBRL').classList.add('active');
+            document.getElementById('btnUSDT').classList.remove('active');
+            if (cachedData.brl && cachedData.usd) renderCards(cachedData.brl, cachedData.usd);
+        });
+
+        document.getElementById('btnUSDT').addEventListener('click', () => {
+            if (currentCurrency === 'usd') return;
+            currentCurrency = 'usd';
+            document.getElementById('btnUSDT').classList.add('active');
+            document.getElementById('btnBRL').classList.remove('active');
+            if (cachedData.brl && cachedData.usd) renderCards(cachedData.brl, cachedData.usd);
+        });
 
         // Event listeners
         document.getElementById('fetchDataButton').addEventListener('click', fetchCryptoData);
